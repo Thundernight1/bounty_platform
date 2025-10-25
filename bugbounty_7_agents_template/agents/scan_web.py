@@ -5,7 +5,7 @@ from rich.console import Console
 console = Console()
 
 async def run(cfg: dict):
-    # httpx + nuclei varsa kullan, yoksa pas geç
+    # Use httpx + nuclei if available, otherwise skip
     out_urls = []
     # httpx
     if os.system("which httpx > /dev/null 2>&1") == 0 and os.path.exists("outputs/subdomains.txt"):
@@ -13,7 +13,7 @@ async def run(cfg: dict):
         if rc == 0:
             out_urls = [l.strip() for l in out.splitlines() if l.strip()]
             save_text("outputs/urls.txt", "\n".join(out_urls))
-            console.log(f"[green]scan_web: httpx {len(out_urls)} URL üretti -> outputs/urls.txt")
+            console.log(f"[green]scan_web: httpx {len(out_urls)} URLs generated -> outputs/urls.txt")
 
     nuclei_findings = []
     if cfg.get("allowed_tests",{}).get("nuclei_signatures", True) and os.system("which nuclei > /dev/null 2>&1") == 0 and os.path.exists("outputs/urls.txt"):

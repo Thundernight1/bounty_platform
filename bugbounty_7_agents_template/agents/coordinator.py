@@ -15,7 +15,7 @@ async def main():
     with open(args.program, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
 
-    # Ajanları modül olarak içe aktar
+    # Import agents as modules
     from agents import envanter, tech_fp, scan_web, content, auth_checks, prompt_ai, reporter
 
     os.makedirs("outputs", exist_ok=True)
@@ -29,21 +29,21 @@ async def main():
         prompt_ai.run(cfg),
     ]
 
-    console.rule("[bold green]7 Ajan Çalışıyor")
+    console.rule("[bold green]7 Agents Running")
     await asyncio.gather(*tasks)
 
-    # Ön rapor ve onay kapısı
+    # Pre-report and approval checkpoint
     await reporter.pre_report(cfg)
     if not args.auto_approve:
-        console.print("[yellow]outputs/REVIEW.md üretildi. İncele ve onay için 'outputs/APPROVED.txt' dosyasını oluştur.")
-        # Kullanıcı onayı bekler
-        for _ in range(60):  # ~60 saniye bekleme (demo)
+        console.print("[yellow]outputs/REVIEW.md generated. Review and create 'outputs/APPROVED.txt' to approve.")
+        # Wait for user approval
+        for _ in range(60):  # ~60 seconds wait (demo)
             if os.path.exists("outputs/APPROVED.txt"):
                 break
             await asyncio.sleep(1)
 
     await reporter.finalize(cfg, auto=args.auto_approve)
-    console.rule("[bold green]Bitti")
+    console.rule("[bold green]Done")
 
 if __name__ == "__main__":
     asyncio.run(main())

@@ -31,10 +31,10 @@ async def run(cfg: dict):
     results = []
     connector = aiohttp.TCPConnector(ssl=False, limit=cfg.get("rate_limit",{}).get("max_concurrency",5))
     async with aiohttp.ClientSession(connector=connector) as session:
-        for u in urls[:100]:  # güvenli limit
+        for u in urls[:100]:  # safe limit
             res = await fetch_head(session, u)
             results.append(res)
     import json, os
     os.makedirs("outputs", exist_ok=True)
     save_text("outputs/tech_fp.json", json.dumps(results, ensure_ascii=False, indent=2))
-    console.log(f"[green]tech_fp: {len(results)} URL için header bilgisi alındı -> outputs/tech_fp.json")
+    console.log(f"[green]tech_fp: {len(results)} URLs header info retrieved -> outputs/tech_fp.json")

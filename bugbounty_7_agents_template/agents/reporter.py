@@ -15,17 +15,17 @@ async def pre_report(cfg: dict):
     nuclei = load_json("outputs/nuclei.json")
     auth = load_json("outputs/auth_checks.json")
     prompt_ai = load_json("outputs/prompt_ai.json")
-    lines = ["# PRE‑REVIEW (Ön Rapor)",
+    lines = ["# PRE-REVIEW (Pre-Report)",
              f"Program: {cfg.get('program_name')}",
-             f"Tarih: {datetime.datetime.utcnow().isoformat()}Z",
+             f"Date: {datetime.datetime.utcnow().isoformat()}Z",
              "",
-             "## Özet",
-             f"- nuclei bulguları: {len(nuclei)}",
-             f"- auth/pasif bulgular: {len(auth)}",
-             f"- prompt_ai denemeleri: {len(prompt_ai)}",
+             "## Summary",
+             f"- nuclei findings: {len(nuclei)}",
+             f"- auth/passive findings: {len(auth)}",
+             f"- prompt_ai attempts: {len(prompt_ai)}",
              "",
-             "## İnceleme Notu",
-             "Bu aşamada doğruluğu kontrol et ve `outputs/APPROVED.txt` oluştur."]
+             "## Review Note",
+             "Review findings and create `outputs/APPROVED.txt` to approve."]
     save_text("outputs/REVIEW.md", "\n".join(lines))
 
 async def finalize(cfg: dict, auto: bool=False):
@@ -33,21 +33,21 @@ async def finalize(cfg: dict, auto: bool=False):
     auth = load_json("outputs/auth_checks.json")
     prompt_ai = load_json("outputs/prompt_ai.json")
 
-    lines = ["# Nihai Rapor",
+    lines = ["# Final Report",
              f"Program: {cfg.get('program_name')}",
-             f"Tarih: {datetime.datetime.utcnow().isoformat()}Z",
+             f"Date: {datetime.datetime.utcnow().isoformat()}Z",
              "",
-             "## Bulgular Özeti",
+             "## Findings Summary",
              f"- nuclei: {len(nuclei)}",
-             f"- pasif auth: {len(auth)}",
+             f"- passive auth: {len(auth)}",
              f"- prompt_ai: {len(prompt_ai)}",
              "",
-             "## Ayrıntılar",
+             "## Details",
              "### nuclei",
              "```json",
              json.dumps(nuclei, ensure_ascii=False, indent=2),
              "```",
-             "### auth/pasif",
+             "### auth/passive",
              "```json",
              json.dumps(auth, ensure_ascii=False, indent=2),
              "```",
@@ -62,4 +62,4 @@ async def finalize(cfg: dict, auto: bool=False):
         "summary": {"nuclei": len(nuclei), "auth": len(auth), "prompt_ai": len(prompt_ai)},
         "nuclei": nuclei, "auth": auth, "prompt_ai": prompt_ai
     }, ensure_ascii=False, indent=2))
-    console.log("[green]Rapor üretildi -> outputs/report.md / outputs/report.json")
+    console.log("[green]Report generated -> outputs/report.md / outputs/report.json")
