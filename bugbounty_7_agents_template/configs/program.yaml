@@ -1,0 +1,29 @@
+# Program yapılandırması
+program_name: "Örnek Şirket – Bug Bounty"
+targets:
+  - domain: "example.com"        # ana domain
+    in_scope: true
+  - domain: "api.example.com"    # alt alan
+    in_scope: true
+
+rate_limit:
+  rps: 2        # istek/saniye
+  max_concurrency: 5
+
+allowed_tests:
+  passive_http: true
+  content_discovery: true
+  nuclei_signatures: true     # nuclei yüklü değilse otomatik pas geçer
+  auth_header_checks: true
+  prompt_injection_checks: true
+
+llm_endpoints:
+  - url: "https://example.com/llm/chat"
+    method: "POST"
+    auth_header: ""           # gerekirse Bearer token
+    body_template: |
+      {"input": "{payload}"}
+
+report:
+  owner_email: "myakupzumrut+agent@gmail.com"
+  include_raw_findings: true
