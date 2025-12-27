@@ -36,13 +36,7 @@ def run_zap_scan(url: str) -> Dict[str, Any]:
         except Exception as exc:
             return {"tool": "owasp_zap", "summary": f"ZAP failed: {exc}", "vulnerabilities": []}
     else:
-        # Return empty results if ZAP not installed (don't return fake vulnerabilities!)
-        return {
-            "tool": "owasp_zap",
-            "summary": "OWASP ZAP not installed - skipping web scan",
-            "vulnerabilities": [],
-            "warning": "Install ZAP for real vulnerability scanning: apt-get install zaproxy"
-        }
+        raise RuntimeError("OWASP ZAP not installed. Install via: apt-get install zaproxy")
 
 
 def run_nuclei_scan(url: str) -> Dict[str, Any]:
@@ -70,13 +64,10 @@ def run_nuclei_scan(url: str) -> Dict[str, Any]:
         except Exception as exc:
             return {"tool": "nuclei", "summary": f"nuclei failed: {exc}", "findings": []}
     else:
-        # Return empty results if nuclei not installed
-        return {
-            "tool": "nuclei",
-            "summary": "nuclei not installed - skipping CVE scan",
-            "findings": [],
-            "warning": "Install nuclei for CVE scanning: go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
-        }
+        raise RuntimeError(
+            "Nuclei not installed. "
+            "Install via: go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest"
+        )
 
 
 def run_mythril_scan(source_code: str) -> Dict[str, Any]:
@@ -108,23 +99,7 @@ def run_mythril_scan(source_code: str) -> Dict[str, Any]:
             except Exception:
                 pass
     else:
-        # Basic heuristic analysis (not a replacement for real Mythril!)
-        issues = []
-        # Only warn about obvious patterns, don't claim vulnerabilities
-        if "call.value" in source_code:
-            issues.append(
-                {
-                    "id": "PATTERN_DETECTED",
-                    "description": "call.value pattern detected - review for reentrancy (install Mythril for proper analysis)",
-                    "severity": "info",
-                }
-            )
-        return {
-            "tool": "mythril",
-            "summary": "Mythril not installed - basic heuristic only",
-            "issues": issues,
-            "warning": "Install Mythril for real smart contract analysis: pip install mythril"
-        }
+        raise RuntimeError("Mythril not installed. Install via: pip install mythril")
 
 
 def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
@@ -154,13 +129,7 @@ def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
             }
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}
-    # Fallback: just list manifests found, no fake vulnerabilities
-    manifests = ["requirements.txt", "package.json", "pyproject.toml", "Gemfile", "pom.xml"]
-    found = [m for m in manifests if (Path(path_or_repo) / m).exists()]
-    return {
-        "tool": "osv-scanner",
-        "summary": "osv-scanner not installed - skipping SCA",
-        "manifests_found": found,
-        "vulnerabilities": [],
-        "warning": "Install osv-scanner for dependency vulnerability scanning: go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
-    }
+    raise RuntimeError(
+        "osv-scanner not installed. "
+        "Install via: go install github.com/google/osv-scanner/cmd/osv-scanner@latest"
+    )

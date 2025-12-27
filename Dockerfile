@@ -8,14 +8,21 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     gcc \
     postgresql-client \
+    golang \
     && rm -rf /var/lib/apt/lists/*
+
+# Install go-based security tools
+ENV GOBIN=/usr/local/bin
+RUN go install github.com/projectdiscovery/nuclei/v2/cmd/nuclei@latest && \
+    go install github.com/google/osv-scanner/cmd/osv-scanner@latest
 
 # Copy requirements first for better caching
 COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir mythril zap-cli
 
 # Production stage
 FROM python:3.11-slim
@@ -27,6 +34,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     postgresql-client \
     curl \
+    zaproxy \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Python dependencies from builder
