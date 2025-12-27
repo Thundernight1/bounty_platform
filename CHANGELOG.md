@@ -42,7 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Project Infrastructure**:
   - Git repository initialization
   - .gitignore with comprehensive exclusions
-  - LICENSE file (MIT)
+  - LICENSE file
   - .env.example for configuration
   - Updated requirements.txt with all dependencies
 

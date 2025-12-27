@@ -168,7 +168,7 @@ bounty-automation-tool/              # Yeni isim
 ├── requirements.txt                # Sadeleştirilmiş
 ├── setup.py                         # Package installer
 ├── README.md                        # Ana döküman
-├── LICENSE                          # MIT
+├── LICENSE                          # License file
 └── CHANGELOG.md                     # Version history
 ```
 

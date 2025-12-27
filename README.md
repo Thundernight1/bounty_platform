@@ -195,7 +195,9 @@ Notes:
 
 ## License
 
-- TODO: Add a license file (e.g., MIT). Until then, usage is at your own discretion for evaluation purposes only.
+Copyright (c) 2025 Bounty Platform Contributors. All Rights Reserved.
+
+This project is currently closed source and proprietary. Usage, redistribution, or modification is not permitted without explicit written permission.
 
 ## Roadmap / TODOs
 
