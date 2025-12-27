@@ -128,7 +128,7 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
 
 
 @app.post("/jobs", response_model=JobStatusResponse, summary="Create a new scan job", dependencies=[Depends(require_api_key)])
-async def create_job(
+def create_job(
     request: JobRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
@@ -193,7 +193,7 @@ async def create_job(
 
 
 @app.get("/jobs/{job_id}", response_model=JobStatusResponse, summary="Retrieve job status")
-async def get_job(job_id: str, db: Session = Depends(get_db)) -> JobStatusResponse:
+def get_job(job_id: str, db: Session = Depends(get_db)) -> JobStatusResponse:
     """
     Retrieve the status and results of a scan job.
 
@@ -215,7 +215,7 @@ async def get_job(job_id: str, db: Session = Depends(get_db)) -> JobStatusRespon
 
 
 @app.get("/jobs", summary="List all jobs")
-async def list_jobs(
+def list_jobs(
     skip: int = 0,
     limit: int = 100,
     project_name: Optional[str] = None,
