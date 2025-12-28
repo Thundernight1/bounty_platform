@@ -21,6 +21,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+import httpx
+from contextlib import asynccontextmanager
 
 # Load environment variables
 load_dotenv()
@@ -49,10 +51,23 @@ except Exception:
         run_sca_scan,
     )
 
+# Initialize database and http client on startup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize database tables and http client on application startup"""
+    init_db()
+    # Performance optimization: Reuse a single httpx client across requests
+    # rather than creating a new one for each notification.
+    app.state.http_client = httpx.AsyncClient()
+    yield
+    await app.state.http_client.aclose()
+
+
 app = FastAPI(
     title="Bug Bounty Platform Backend",
     description="Blockchain-based bug bounty platform with multi-agent security scanning",
-    version="2.0.0"
+    version="2.0.0",
+    lifespan=lifespan
 )
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
@@ -67,13 +82,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-
-# Initialize database on startup
-@app.on_event("startup")
-async def startup_event():
-    """Initialize database tables on application startup"""
-    init_db()
 
 
 class JobRequest(BaseModel):
@@ -340,8 +348,6 @@ async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]
     if not webhook:
         return
     try:
-        import httpx
-
         counts = []
         if result.get("web_scan"):
             ws = result["web_scan"]
@@ -368,8 +374,15 @@ async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]
             f"type: {request.job_type} | project: {request.project_name}\n"
             f"summary: {' '.join(counts) if counts else 'done'}"
         )
-        async with httpx.AsyncClient() as client:
+
+        # Use the global client if available, otherwise fall back to a new one
+        client = getattr(app.state, "http_client", None)
+        if client:
             await client.post(webhook, json={"text": text}, timeout=5)
+        else:
+            async with httpx.AsyncClient() as new_client:
+                await new_client.post(webhook, json={"text": text}, timeout=5)
+
     except Exception:
         # Silent: notifications should never break the job
         pass
