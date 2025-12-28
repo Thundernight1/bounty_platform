@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Literal
 from urllib.parse import urlparse
+import httpx
 
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, Header
 from fastapi.middleware.cors import CORSMiddleware
@@ -55,6 +56,11 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# ⚡ Bolt: Create a single, reusable httpx.AsyncClient to avoid the overhead
+# of creating a new client and connection for every Slack notification.
+# This improves performance by reusing connections.
+_slack_client = httpx.AsyncClient()
+
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -74,6 +80,13 @@ app.add_middleware(
 async def startup_event():
     """Initialize database tables on application startup"""
     init_db()
+
+
+# ⚡ Bolt: Add a shutdown event to gracefully close the httpx client.
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Gracefully close the httpx client on application shutdown"""
+    await _slack_client.aclose()
 
 
 class JobRequest(BaseModel):
@@ -340,8 +353,6 @@ async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]
     if not webhook:
         return
     try:
-        import httpx
-
         counts = []
         if result.get("web_scan"):
             ws = result["web_scan"]
@@ -368,8 +379,8 @@ async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]
             f"type: {request.job_type} | project: {request.project_name}\n"
             f"summary: {' '.join(counts) if counts else 'done'}"
         )
-        async with httpx.AsyncClient() as client:
-            await client.post(webhook, json={"text": text}, timeout=5)
+        # ⚡ Bolt: Use the shared httpx client for performance.
+        await _slack_client.post(webhook, json={"text": text}, timeout=5)
     except Exception:
         # Silent: notifications should never break the job
         pass
