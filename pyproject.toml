@@ -20,3 +20,4 @@ bp = "bp:main"
 
 [tool.setuptools]
 py-modules = ["bp"]
+packages = ["backend"]
