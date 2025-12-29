@@ -1,3 +1,3 @@
-## 2024-05-23 - [Blocking Calls in Async Functions]
-**Learning:** Mixing synchronous I/O (like `requests`) in async FastAPI routes or background tasks blocks the entire event loop, killing concurrency. Using `httpx` or `asyncio.to_thread` is essential.
-**Action:** Always check for blocking I/O in async paths and convert to async alternatives or offload to a thread.
+## 2024-05-23 - [Shared httpx.AsyncClient Optimization]
+**Learning:** Reusing a single `httpx.AsyncClient` throughout the application lifespan significantly reduces overhead compared to creating a new client for every request.
+**Action:** Use `app.state.http_client` initialized in the `lifespan` event handler for all internal HTTP requests. Always include a fallback for contexts where the app state might not be fully initialized (like unit tests).
