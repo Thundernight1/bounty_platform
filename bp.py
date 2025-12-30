@@ -2,6 +2,8 @@
 import argparse
 import json
 import sys
+import time
+import itertools
 import requests
 
 
@@ -31,6 +33,12 @@ def main():
     )
     run_group.add_argument(
         "--no-accept", action="store_true", help="Do not accept terms (will fail)"
+    )
+    run_group.add_argument(
+        "-w",
+        "--wait",
+        action="store_true",
+        help="Wait for the job to complete and show results.",
     )
 
     # Help argument
@@ -116,7 +124,38 @@ def main():
         project = data.get("project_name")
         print(f"Job submitted successfully for project '{project}'.")
         print(f"Job ID: {job_id}")
-        print(f"To check status, run: bp status {job_id}")
+
+        if args.wait:
+            spinner = itertools.cycle(["-", "/", "|", "\\"])
+            status = "pending"
+            print("Waiting for job to complete...", end="", flush=True)
+            while status not in ["finished", "failed"]:
+                try:
+                    time.sleep(1)
+                    r_status = requests.get(f"{args.api}/jobs/{job_id}")
+                    r_status.raise_for_status()
+                    status = r_status.json().get("status")
+                    print(f"\rWaiting for job to complete... {next(spinner)}", end="", flush=True)
+                except (requests.RequestException, KeyboardInterrupt) as e:
+                    print(f"\nAn error occurred: {e}")
+                    sys.exit(1)
+
+            print("\nJob finished.")
+            # Fetch final status and display
+            r_final = requests.get(f"{args.api}/jobs/{job_id}")
+            final_data = r_final.json()
+            print("Job Status:")
+            print(f"  ID: {final_data.get('job_id')}")
+            print(f"  Project: {final_data.get('project_name')}")
+            print(f"  Type: {final_data.get('job_type')}")
+            print(f"  Status: {final_data.get('status')}")
+            print(f"  Created At: {final_data.get('created_at')}")
+            if final_data.get("started_at"):
+                print(f"  Started At: {final_data.get('started_at')}")
+            if final_data.get("finished_at"):
+                print(f"  Finished At: {final_data.get('finished_at')}")
+        else:
+            print(f"To check status, run: bp status {job_id}")
 
 
 if __name__ == "__main__":
