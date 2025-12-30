@@ -12,6 +12,7 @@ import json
 import asyncio
 from datetime import datetime
 import os
+import secrets
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Literal
 from urllib.parse import urlparse
@@ -102,7 +103,7 @@ def require_api_key(x_api_key: str | None = Header(default=None)):
     required = os.environ.get("API_KEY")
     if not required:
         return  # open by default if API_KEY is not configured
-    if x_api_key != required:
+    if not x_api_key or not secrets.compare_digest(x_api_key, required):
         raise HTTPException(status_code=401, detail="Invalid or missing API key")
 
 
