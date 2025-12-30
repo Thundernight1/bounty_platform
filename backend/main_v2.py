@@ -251,7 +251,7 @@ def list_jobs(
 
 async def _run_scans(job_id: str, request: JobRequest) -> None:
     """
-    Background task to run security scans.
+    Asynchronous background task to run security scans.
     Updates job status in database throughout execution.
     """
     from backend.database import SessionLocal
@@ -288,21 +288,21 @@ async def _run_scans(job_id: str, request: JobRequest) -> None:
 
         # Run scans based on job type
         if request.job_type == "attack_surface":
-            # Optimization: Run scans in parallel
-            web_scan_task = asyncio.to_thread(run_zap_scan, request.target_url)
-            nuclei_task = asyncio.to_thread(run_nuclei_scan, request.target_url)
-
-            web_scan_result, nuclei_result = await asyncio.gather(web_scan_task, nuclei_task)
-
+            # Performance: Run I/O-bound scans concurrently using asyncio.gather.
+            # This is more efficient than using threads for async subprocesses.
+            web_scan_result, nuclei_result = await asyncio.gather(
+                run_zap_scan(request.target_url),
+                run_nuclei_scan(request.target_url),
+            )
             result["web_scan"] = web_scan_result
             result["nuclei"] = nuclei_result
 
         elif request.job_type == "sca":
-            result["sca"] = await asyncio.to_thread(run_sca_scan, request.target_url)
+            result["sca"] = await run_sca_scan(request.target_url)
 
         elif request.job_type == "smart_contract":
-            result["contract_analysis"] = await asyncio.to_thread(
-                run_mythril_scan, request.contract_source or ""
+            result["contract_analysis"] = await run_mythril_scan(
+                request.contract_source or ""
             )
 
         # Update job with results
