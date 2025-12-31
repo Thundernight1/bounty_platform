@@ -2,7 +2,26 @@
 import argparse
 import json
 import sys
+import time
 import requests
+
+
+def print_job_status(data):
+    """Prints formatted job status."""
+    print("\nJob Status:")
+    print(f"  ID: {data.get('job_id')}")
+    print(f"  Project: {data.get('project_name')}")
+    print(f"  Type: {data.get('job_type')}")
+    print(f"  Status: {data.get('status')}")
+    print(f"  Created At: {data.get('created_at')}")
+    if data.get("started_at"):
+        print(f"  Started At: {data.get('started_at')}")
+    if data.get("finished_at"):
+        print(f"  Finished At: {data.get('finished_at')}")
+    if data.get("result"):
+        print("  Result:")
+        print(f"    Findings: {len(data['result'].get('findings', []))}")
+        print(f"    Output File: {data['result'].get('output_file')}")
 
 
 def main():
@@ -31,6 +50,11 @@ def main():
     )
     run_group.add_argument(
         "--no-accept", action="store_true", help="Do not accept terms (will fail)"
+    )
+    run_group.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for the job to complete and show results.",
     )
 
     # Help argument
@@ -62,16 +86,7 @@ def main():
             print(r.text, file=sys.stderr)
             sys.exit(1)
         data = r.json()
-        print("Job Status:")
-        print(f"  ID: {data.get('job_id')}")
-        print(f"  Project: {data.get('project_name')}")
-        print(f"  Type: {data.get('job_type')}")
-        print(f"  Status: {data.get('status')}")
-        print(f"  Created At: {data.get('created_at')}")
-        if data.get("started_at"):
-            print(f"  Started At: {data.get('started_at')}")
-        if data.get("finished_at"):
-            print(f"  Finished At: {data.get('finished_at')}")
+        print_job_status(data)
     else:
         # Handle default 'run' command
         # Manually check for required arguments for the run command
@@ -116,7 +131,38 @@ def main():
         project = data.get("project_name")
         print(f"Job submitted successfully for project '{project}'.")
         print(f"Job ID: {job_id}")
-        print(f"To check status, run: bp status {job_id}")
+
+        if args.wait:
+            spinner = "|/-\\"
+            spinner_idx = 0
+            print("Waiting for job to complete...", end="", flush=True)
+            while True:
+                time.sleep(0.2)
+                print(f"\rWaiting for job to complete... {spinner[spinner_idx]}", end="", flush=True)
+                spinner_idx = (spinner_idx + 1) % len(spinner)
+
+                # Check status every 2 seconds
+                if int(time.time() * 5) % 10 == 0:
+                    r = requests.get(f"{args.api}/jobs/{job_id}")
+                    if r.ok:
+                        status_data = r.json()
+                        status = status_data.get("status")
+                        if status == "finished":
+                            print("\rJob finished!               ")
+                            print_job_status(status_data)
+                            break
+                        elif status not in ["pending", "running"]:
+                            print(
+                                f"\rJob in unexpected state: {status}", file=sys.stderr
+                            )
+                            break
+                    else:
+                        print(
+                            f"\rError fetching status: {r.text}", file=sys.stderr
+                        )
+                        break
+        else:
+            print(f"To check status, run: bp status {job_id}")
 
 
 if __name__ == "__main__":
