@@ -13,27 +13,40 @@ import asyncio
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+
+
+async def _run_command(args: List[str]) -> Dict[str, Any]:
+    """
+    Helper to run a subprocess asynchronously.
+    """
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        return {
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace"),
+            "returncode": process.returncode
+        }
+    except Exception as exc:
+        raise exc
 
 
 async def run_zap_scan(url: str) -> Dict[str, Any]:
     zap_cli_path = shutil.which("zap-cli")
     if zap_cli_path:
         try:
-            # Create subprocess instead of blocking run
-            process = await asyncio.create_subprocess_exec(
-                zap_cli_path, "quick-scan", url,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout_bytes, stderr_bytes = await process.communicate()
-
+            completed = await _run_command([zap_cli_path, "quick-scan", url])
             return {
                 "tool": "owasp_zap",
                 "summary": "ZAP quick scan completed",
-                "stdout": stdout_bytes.decode(),
-                "stderr": stderr_bytes.decode(),
-                "returncode": process.returncode,
+                "stdout": completed["stdout"],
+                "stderr": completed["stderr"],
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "owasp_zap", "summary": f"ZAP failed: {exc}", "vulnerabilities": []}
@@ -51,16 +64,9 @@ async def run_nuclei_scan(url: str) -> Dict[str, Any]:
     nuclei = shutil.which("nuclei")
     if nuclei:
         try:
-            process = await asyncio.create_subprocess_exec(
-                nuclei, "-u", url, "-json", "-silent",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout_bytes, stderr_bytes = await process.communicate()
-            stdout_text = stdout_bytes.decode()
-
+            completed = await _run_command([nuclei, "-u", url, "-json", "-silent"])
             findings = []
-            for line in stdout_text.splitlines():
+            for line in completed["stdout"].splitlines():
                 try:
                     findings.append(json.loads(line))
                 except Exception:
@@ -69,7 +75,7 @@ async def run_nuclei_scan(url: str) -> Dict[str, Any]:
                 "tool": "nuclei",
                 "summary": f"nuclei completed, {len(findings)} findings",
                 "findings": findings,
-                "returncode": process.returncode,
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "nuclei", "summary": f"nuclei failed: {exc}", "findings": []}
@@ -86,25 +92,20 @@ async def run_nuclei_scan(url: str) -> Dict[str, Any]:
 async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
     mythril_path = shutil.which("mythril")
     if mythril_path:
-        # We still need temp file, blocking I/O here is minimal compared to scan time
+        # Mythril requires a file, so we still need sync file IO for temp file creation,
+        # but it's negligible compared to the scan time.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sol", delete=False) as tmp:
             tmp.write(source_code)
             tmp.flush()
             tmp_path = tmp.name
         try:
-            process = await asyncio.create_subprocess_exec(
-                mythril_path, "-x", tmp_path, "--no-color",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout_bytes, stderr_bytes = await process.communicate()
-
+            completed = await _run_command([mythril_path, "-x", tmp_path, "--no-color"])
             return {
                 "tool": "mythril",
                 "summary": "Mythril analysis completed",
-                "stdout": stdout_bytes.decode(),
-                "stderr": stderr_bytes.decode(),
-                "returncode": process.returncode,
+                "stdout": completed["stdout"],
+                "stderr": completed["stderr"],
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "mythril", "summary": f"Mythril failed: {exc}", "issues": []}
@@ -139,23 +140,17 @@ async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
     osv = shutil.which("osv-scanner")
     if osv:
         try:
-            process = await asyncio.create_subprocess_exec(
-                osv, "--recursive", path_or_repo, "--json",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
-            )
-            stdout_bytes, stderr_bytes = await process.communicate()
-
+            completed = await _run_command([osv, "--recursive", path_or_repo, "--json"])
             data = {}
             try:
-                data = json.loads(stdout_bytes.decode() or "{}")
+                data = json.loads(completed["stdout"] or "{}")
             except Exception:
                 pass
             return {
                 "tool": "osv-scanner",
                 "summary": "OSV scan completed",
                 "results": data,
-                "returncode": process.returncode,
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}

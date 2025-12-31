@@ -289,8 +289,6 @@ async def _run_scans(job_id: str, request: JobRequest) -> None:
         # Run scans based on job type
         if request.job_type == "attack_surface":
             # Optimization: Run scans in parallel
-            # Since scanners are now async native using asyncio.create_subprocess_exec,
-            # we call them directly instead of using asyncio.to_thread
             web_scan_task = run_zap_scan(request.target_url)
             nuclei_task = run_nuclei_scan(request.target_url)
 
