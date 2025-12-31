@@ -185,16 +185,16 @@ async def _run_scans(job_id: str, request: JobRequest) -> None:
     job.status = "finished"
     with open(RESULTS_DIR / f"{job_id}.json", "w") as f:
         json.dump(result, f, indent=2)
-    _notify_slack(job_id, request, result)
+    await _notify_slack(job_id, request, result)
 
 
-def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]) -> None:
+async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]) -> None:
     """Post a short summary to Slack if SLACK_WEBHOOK_URL is set."""
     webhook = os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook:
         return
     try:
-        import requests  # lazy import
+        import httpx  # lazy import
 
         counts = []
         if result.get("web_scan"):
@@ -222,7 +222,8 @@ def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]) -> N
             f"type: {request.job_type} | project: {request.project_name}\n"
             f"summary: {' '.join(counts) if counts else 'done'}"
         )
-        requests.post(webhook, json={"text": text}, timeout=5)
+        async with httpx.AsyncClient() as client:
+            await client.post(webhook, json={"text": text}, timeout=5)
     except Exception:
         # Silent: notifications should never break the job
         pass
