@@ -51,7 +51,7 @@ async def run_zap_scan(url: str) -> Dict[str, Any]:
         except Exception as exc:
             return {"tool": "owasp_zap", "summary": f"ZAP failed: {exc}", "vulnerabilities": []}
     else:
-        # Return empty results if ZAP not installed (don't return fake vulnerabilities!)
+        # Return empty results if ZAP not installed
         return {
             "tool": "owasp_zap",
             "summary": "OWASP ZAP not installed - skipping web scan",
@@ -115,9 +115,8 @@ async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
             except Exception:
                 pass
     else:
-        # Basic heuristic analysis (not a replacement for real Mythril!)
+        # Basic heuristic analysis
         issues = []
-        # Only warn about obvious patterns, don't claim vulnerabilities
         if "call.value" in source_code:
             issues.append(
                 {
@@ -136,8 +135,7 @@ async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
 
 async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
     """
-    Software Composition Analysis. If 'osv-scanner' is installed, run it against the path.
-    Otherwise, attempt a very naive parse of common manifest files or return mock issues.
+    Software Composition Analysis.
     """
     osv = shutil.which("osv-scanner")
     if osv:
@@ -156,7 +154,8 @@ async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
             }
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}
-    # Fallback: just list manifests found, no fake vulnerabilities
+
+    # Fallback: just list manifests found
     manifests = ["requirements.txt", "package.json", "pyproject.toml", "Gemfile", "pom.xml"]
     found = [m for m in manifests if (Path(path_or_repo) / m).exists()]
     return {
