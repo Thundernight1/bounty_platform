@@ -173,17 +173,15 @@ async def _run_scans(job_id: str, request: JobRequest) -> None:
 
     if request.job_type == "attack_surface":
         # Run scans concurrently to reduce total time
-        zap_task = asyncio.to_thread(run_zap_scan, request.target_url)  # type: ignore[arg-type]
-        nuclei_task = asyncio.to_thread(run_nuclei_scan, request.target_url)  # type: ignore[arg-type]
+        zap_task = run_zap_scan(request.target_url)  # type: ignore[arg-type]
+        nuclei_task = run_nuclei_scan(request.target_url)  # type: ignore[arg-type]
         result["web_scan"], result["nuclei"] = await asyncio.gather(zap_task, nuclei_task)
 
     elif request.job_type == "sca":
-        result["sca"] = await asyncio.to_thread(run_sca_scan, request.target_url)  # type: ignore[arg-type]
+        result["sca"] = await run_sca_scan(request.target_url)  # type: ignore[arg-type]
 
     elif request.job_type == "smart_contract":
-        result["contract_analysis"] = await asyncio.to_thread(
-            run_mythril_scan, request.contract_source or ""
-        )
+        result["contract_analysis"] = await run_mythril_scan(request.contract_source or "")
 
     job.finished_at = datetime.utcnow()
     job.status = "finished"

@@ -9,34 +9,49 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import asyncio
 import tempfile
 import shutil
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
 
 
-def run_zap_scan(url: str) -> Dict[str, Any]:
+async def _run_command(args: List[str]) -> Dict[str, Any]:
+    """
+    Helper to run a subprocess asynchronously.
+    """
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        return {
+            "stdout": stdout.decode("utf-8", errors="replace"),
+            "stderr": stderr.decode("utf-8", errors="replace"),
+            "returncode": process.returncode
+        }
+    except Exception as exc:
+        raise exc
+
+
+async def run_zap_scan(url: str) -> Dict[str, Any]:
     zap_cli_path = shutil.which("zap-cli")
     if zap_cli_path:
         try:
-            completed = subprocess.run(
-                [zap_cli_path, "quick-scan", url],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            completed = await _run_command([zap_cli_path, "quick-scan", url])
             return {
                 "tool": "owasp_zap",
                 "summary": "ZAP quick scan completed",
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-                "returncode": completed.returncode,
+                "stdout": completed["stdout"],
+                "stderr": completed["stderr"],
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "owasp_zap", "summary": f"ZAP failed: {exc}", "vulnerabilities": []}
     else:
-        # Return empty results if ZAP not installed (don't return fake vulnerabilities!)
+        # Return empty results if ZAP not installed
         return {
             "tool": "owasp_zap",
             "summary": "OWASP ZAP not installed - skipping web scan",
@@ -45,18 +60,13 @@ def run_zap_scan(url: str) -> Dict[str, Any]:
         }
 
 
-def run_nuclei_scan(url: str) -> Dict[str, Any]:
+async def run_nuclei_scan(url: str) -> Dict[str, Any]:
     nuclei = shutil.which("nuclei")
     if nuclei:
         try:
-            completed = subprocess.run(
-                [nuclei, "-u", url, "-json", "-silent"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            completed = await _run_command([nuclei, "-u", url, "-json", "-silent"])
             findings = []
-            for line in completed.stdout.splitlines():
+            for line in completed["stdout"].splitlines():
                 try:
                     findings.append(json.loads(line))
                 except Exception:
@@ -65,7 +75,7 @@ def run_nuclei_scan(url: str) -> Dict[str, Any]:
                 "tool": "nuclei",
                 "summary": f"nuclei completed, {len(findings)} findings",
                 "findings": findings,
-                "returncode": completed.returncode,
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "nuclei", "summary": f"nuclei failed: {exc}", "findings": []}
@@ -79,26 +89,23 @@ def run_nuclei_scan(url: str) -> Dict[str, Any]:
         }
 
 
-def run_mythril_scan(source_code: str) -> Dict[str, Any]:
+async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
     mythril_path = shutil.which("mythril")
     if mythril_path:
+        # Mythril requires a file, so we still need sync file IO for temp file creation,
+        # but it's negligible compared to the scan time.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sol", delete=False) as tmp:
             tmp.write(source_code)
             tmp.flush()
             tmp_path = tmp.name
         try:
-            completed = subprocess.run(
-                [mythril_path, "-x", tmp_path, "--no-color"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            completed = await _run_command([mythril_path, "-x", tmp_path, "--no-color"])
             return {
                 "tool": "mythril",
                 "summary": "Mythril analysis completed",
-                "stdout": completed.stdout,
-                "stderr": completed.stderr,
-                "returncode": completed.returncode,
+                "stdout": completed["stdout"],
+                "stderr": completed["stderr"],
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "mythril", "summary": f"Mythril failed: {exc}", "issues": []}
@@ -108,9 +115,8 @@ def run_mythril_scan(source_code: str) -> Dict[str, Any]:
             except Exception:
                 pass
     else:
-        # Basic heuristic analysis (not a replacement for real Mythril!)
+        # Basic heuristic analysis
         issues = []
-        # Only warn about obvious patterns, don't claim vulnerabilities
         if "call.value" in source_code:
             issues.append(
                 {
@@ -127,34 +133,29 @@ def run_mythril_scan(source_code: str) -> Dict[str, Any]:
         }
 
 
-def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
+async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
     """
-    Software Composition Analysis. If 'osv-scanner' is installed, run it against the path.
-    Otherwise, attempt a very naive parse of common manifest files or return mock issues.
+    Software Composition Analysis.
     """
     osv = shutil.which("osv-scanner")
     if osv:
         try:
-            completed = subprocess.run(
-                [osv, "--recursive", path_or_repo, "--json"],
-                check=False,
-                capture_output=True,
-                text=True,
-            )
+            completed = await _run_command([osv, "--recursive", path_or_repo, "--json"])
             data = {}
             try:
-                data = json.loads(completed.stdout or "{}")
+                data = json.loads(completed["stdout"] or "{}")
             except Exception:
                 pass
             return {
                 "tool": "osv-scanner",
                 "summary": "OSV scan completed",
                 "results": data,
-                "returncode": completed.returncode,
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}
-    # Fallback: just list manifests found, no fake vulnerabilities
+
+    # Fallback: just list manifests found
     manifests = ["requirements.txt", "package.json", "pyproject.toml", "Gemfile", "pom.xml"]
     found = [m for m in manifests if (Path(path_or_repo) / m).exists()]
     return {
