@@ -288,12 +288,10 @@ async def _run_scans(job_id: str, request: JobRequest) -> None:
 
         # Run scans based on job type
         if request.job_type == "attack_surface":
-            # Optimization: Run scans in parallel
+            # Optimization: Run scans in parallel using asyncio.gather
             web_scan_task = run_zap_scan(request.target_url)
             nuclei_task = run_nuclei_scan(request.target_url)
-
             web_scan_result, nuclei_result = await asyncio.gather(web_scan_task, nuclei_task)
-
             result["web_scan"] = web_scan_result
             result["nuclei"] = nuclei_result
 

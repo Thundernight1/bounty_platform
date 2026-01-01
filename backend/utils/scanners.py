@@ -7,51 +7,38 @@ otherwise returns mock/heuristic results to keep the flow usable.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import asyncio
 import tempfile
 import shutil
-from pathlib import Path
-from typing import Dict, Any, List, Optional
-
-
-async def _run_command(args: List[str]) -> Dict[str, Any]:
-    """
-    Helper to run a subprocess asynchronously.
-    """
-    try:
-        process = await asyncio.create_subprocess_exec(
-            *args,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
-        return {
-            "stdout": stdout.decode("utf-8", errors="replace"),
-            "stderr": stderr.decode("utf-8", errors="replace"),
-            "returncode": process.returncode
-        }
-    except Exception as exc:
-        raise exc
+from typing import Dict, Any
 
 
 async def run_zap_scan(url: str) -> Dict[str, Any]:
+    """
+    Runs OWASP ZAP scan asynchronously using asyncio.create_subprocess_exec.
+    This is a performance optimization to avoid blocking threads for I/O-bound operations.
+    """
     zap_cli_path = shutil.which("zap-cli")
     if zap_cli_path:
         try:
-            completed = await _run_command([zap_cli_path, "quick-scan", url])
+            process = await asyncio.create_subprocess_exec(
+                zap_cli_path, "quick-scan", url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
             return {
                 "tool": "owasp_zap",
                 "summary": "ZAP quick scan completed",
-                "stdout": completed["stdout"],
-                "stderr": completed["stderr"],
-                "returncode": completed["returncode"],
+                "stdout": stdout.decode(errors='ignore'),
+                "stderr": stderr.decode(errors='ignore'),
+                "returncode": process.returncode,
             }
         except Exception as exc:
             return {"tool": "owasp_zap", "summary": f"ZAP failed: {exc}", "vulnerabilities": []}
     else:
-        # Return empty results if ZAP not installed
         return {
             "tool": "owasp_zap",
             "summary": "OWASP ZAP not installed - skipping web scan",
@@ -61,12 +48,21 @@ async def run_zap_scan(url: str) -> Dict[str, Any]:
 
 
 async def run_nuclei_scan(url: str) -> Dict[str, Any]:
+    """
+    Runs nuclei scan asynchronously using asyncio.create_subprocess_exec.
+    This is a performance optimization to avoid blocking threads for I/O-bound operations.
+    """
     nuclei = shutil.which("nuclei")
     if nuclei:
         try:
-            completed = await _run_command([nuclei, "-u", url, "-json", "-silent"])
+            process = await asyncio.create_subprocess_exec(
+                nuclei, "-u", url, "-json", "-silent",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
             findings = []
-            for line in completed["stdout"].splitlines():
+            for line in stdout.decode(errors='ignore').splitlines():
                 try:
                     findings.append(json.loads(line))
                 except Exception:
@@ -75,12 +71,11 @@ async def run_nuclei_scan(url: str) -> Dict[str, Any]:
                 "tool": "nuclei",
                 "summary": f"nuclei completed, {len(findings)} findings",
                 "findings": findings,
-                "returncode": completed["returncode"],
+                "returncode": process.returncode,
             }
         except Exception as exc:
             return {"tool": "nuclei", "summary": f"nuclei failed: {exc}", "findings": []}
     else:
-        # Return empty results if nuclei not installed
         return {
             "tool": "nuclei",
             "summary": "nuclei not installed - skipping CVE scan",
@@ -118,13 +113,11 @@ async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
         # Basic heuristic analysis
         issues = []
         if "call.value" in source_code:
-            issues.append(
-                {
-                    "id": "PATTERN_DETECTED",
-                    "description": "call.value pattern detected - review for reentrancy (install Mythril for proper analysis)",
-                    "severity": "info",
-                }
-            )
+            issues.append({
+                "id": "PATTERN_DETECTED",
+                "description": "call.value pattern detected - review for reentrancy (install Mythril for proper analysis)",
+                "severity": "info",
+            })
         return {
             "tool": "mythril",
             "summary": "Mythril not installed - basic heuristic only",
@@ -135,7 +128,8 @@ async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
 
 async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
     """
-    Software Composition Analysis.
+    Runs Software Composition Analysis asynchronously using asyncio.create_subprocess_exec.
+    This is a performance optimization to avoid blocking threads for I/O-bound operations.
     """
     osv = shutil.which("osv-scanner")
     if osv:
@@ -155,7 +149,7 @@ async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}
 
-    # Fallback: just list manifests found
+    from pathlib import Path
     manifests = ["requirements.txt", "package.json", "pyproject.toml", "Gemfile", "pom.xml"]
     found = [m for m in manifests if (Path(path_or_repo) / m).exists()]
     return {
