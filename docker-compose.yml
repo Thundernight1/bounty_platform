@@ -81,6 +81,20 @@ services:
       - bounty_network
     restart: unless-stopped
 
+  # Frontend (React App)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: bounty_platform_frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    networks:
+      - bounty_network
+    restart: unless-stopped
+
   # Nginx (reverse proxy - optional)
   nginx:
     image: nginx:alpine

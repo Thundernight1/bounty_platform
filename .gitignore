@@ -78,6 +78,7 @@ node_modules/
 .next/
 dist/
 build/
+coverage/
 
 # Temporary files
 tmp/
@@ -88,3 +89,16 @@ temp/
 Thumbs.db
 .Spotlight-V100
 .Trashes
+
+# Archive & Docs
+archive/
+docs/CLEANUP_ANALYSIS.md
+docs/REAL_GOAL_ANALYSIS.md
+docs/AUTOMATION_PLAN.md
+docs/PRODUCTION_READINESS.md
+docs/DEVELOPMENT.md
+docs/bugbounty_agents_overview.md
+
+# Hardhat
+smart_contract/artifacts/
+smart_contract/cache/

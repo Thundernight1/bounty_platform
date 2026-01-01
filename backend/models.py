@@ -29,6 +29,22 @@ class JobStatus(str, enum.Enum):
     CANCELLED = "cancelled"
 
 
+class User(Base):
+    """
+    User model for authentication and job ownership.
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    hashed_password = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<User(id={self.id}, email={self.email})>"
+
+
 class Job(Base):
     """
     Job model representing a security scan job.
@@ -43,6 +59,9 @@ class Job(Base):
     project_name = Column(String(255), nullable=False, index=True)
     job_type = Column(SQLEnum(JobType), nullable=False, index=True)
     status = Column(SQLEnum(JobStatus), nullable=False, default=JobStatus.PENDING, index=True)
+
+    # Ownership
+    user_id = Column(Integer, nullable=True, index=True)  # Linked to User.id
 
     # Target information
     target_url = Column(String(2048), nullable=True)

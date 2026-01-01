@@ -7,14 +7,13 @@ from __future__ import annotations
 import os
 from typing import Generator
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Database URL from environment or default to SQLite
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./bounty_platform.db")
+# Load from env or default
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@localhost/bounty_db")
 
 # Create engine
 # For SQLite, we need to enable check_same_thread=False
