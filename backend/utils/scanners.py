@@ -85,29 +85,22 @@ async def run_nuclei_scan(url: str) -> Dict[str, Any]:
 
 
 async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
-    """
-    Runs Mythril scan asynchronously using asyncio.create_subprocess_exec.
-    This is a performance optimization to avoid blocking threads for I/O-bound operations.
-    """
     mythril_path = shutil.which("mythril")
     if mythril_path:
+        # Mythril requires a file, so we still need sync file IO for temp file creation,
+        # but it's negligible compared to the scan time.
         with tempfile.NamedTemporaryFile(mode="w", suffix=".sol", delete=False) as tmp:
             tmp.write(source_code)
             tmp.flush()
             tmp_path = tmp.name
         try:
-            process = await asyncio.create_subprocess_exec(
-                mythril_path, "-x", tmp_path, "--no-color",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
+            completed = await _run_command([mythril_path, "-x", tmp_path, "--no-color"])
             return {
                 "tool": "mythril",
                 "summary": "Mythril analysis completed",
-                "stdout": stdout.decode(errors='ignore'),
-                "stderr": stderr.decode(errors='ignore'),
-                "returncode": process.returncode,
+                "stdout": completed["stdout"],
+                "stderr": completed["stderr"],
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "mythril", "summary": f"Mythril failed: {exc}", "issues": []}
@@ -117,6 +110,7 @@ async def run_mythril_scan(source_code: str) -> Dict[str, Any]:
             except Exception:
                 pass
     else:
+        # Basic heuristic analysis
         issues = []
         if "call.value" in source_code:
             issues.append({
@@ -140,22 +134,17 @@ async def run_sca_scan(path_or_repo: str) -> Dict[str, Any]:
     osv = shutil.which("osv-scanner")
     if osv:
         try:
-            process = await asyncio.create_subprocess_exec(
-                osv, "--recursive", path_or_repo, "--json",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            stdout, stderr = await process.communicate()
+            completed = await _run_command([osv, "--recursive", path_or_repo, "--json"])
             data = {}
             try:
-                data = json.loads(stdout.decode(errors='ignore') or "{}")
+                data = json.loads(completed["stdout"] or "{}")
             except Exception:
                 pass
             return {
                 "tool": "osv-scanner",
                 "summary": "OSV scan completed",
                 "results": data,
-                "returncode": process.returncode,
+                "returncode": completed["returncode"],
             }
         except Exception as exc:
             return {"tool": "osv-scanner", "summary": f"OSV failed: {exc}", "results": {}}
