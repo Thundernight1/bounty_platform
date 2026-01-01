@@ -1,0 +1,3 @@
+## 2024-05-20 - Explicit CLI Subcommands Enhance UX
+**Learning:** A CLI with a default, implicit subcommand (like `run`) can be confusing for new users. Making subcommands explicit (e.g., requiring `bp run`) and providing a clear, top-level help message that lists all available commands (`run`, `status`) significantly improves discoverability and usability.
+**Action:** When working on CLIs, always prefer explicit subcommands over implicit ones. If backward compatibility is a concern, implement a graceful default but ensure the help text and documentation clearly guide users toward the more explicit and modern usage.
