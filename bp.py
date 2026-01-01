@@ -25,76 +25,80 @@ def print_job_status(data):
 
 
 def main():
-    # Main parser for the default 'run' command and global options
+    # Main parser
     parser = argparse.ArgumentParser(
         prog="bp",
-        description="Bug Bounty Platform CLI. Default command is 'run'.",
-        add_help=False,  # We will add it back later to control order
+        description="Bug Bounty Platform CLI.",
     )
-
-    # Arguments for the 'run' command
-    run_group = parser.add_argument_group("Run Command Arguments")
-    run_group.add_argument(
-        "--api", default="http://localhost:8000", help="Backend API URL"
-    )
-    run_group.add_argument("--project", help="Project name")
-    run_group.add_argument(
-        "--type", choices=["attack_surface", "sca", "smart_contract"]
-    )
-    run_group.add_argument(
-        "--url", help="Target URL (attack_surface) or repo path (sca)"
-    )
-    run_group.add_argument("--source", help="Solidity source file for smart_contract")
-    run_group.add_argument(
-        "--scope", nargs="*", default=[], help="Allowed domains/repos"
-    )
-    run_group.add_argument(
-        "--no-accept", action="store_true", help="Do not accept terms (will fail)"
-    )
-    run_group.add_argument(
-        "--wait",
-        action="store_true",
-        help="Wait for the job to complete and show results.",
-    )
-
-    # Help argument
-    parser.add_argument(
-        "-h",
-        "--help",
-        action="help",
-        default=argparse.SUPPRESS,
-        help="Show this help message and exit.",
-    )
-
     subparsers = parser.add_subparsers(dest="cmd", title="Available Commands")
 
+    # Parser for the 'run' command
+    run_parser = subparsers.add_parser(
+        "run", help="Submit a new scan job (default command)"
+    )
+    run_parser.add_argument(
+        "--api", default="http://localhost:8000", help="Backend API URL"
+    )
+    run_parser.add_argument("--project", required=True, help="Project name")
+    run_parser.add_argument(
+        "--type",
+        required=True,
+        choices=["attack_surface", "sca", "smart_contract"],
+        help="Type of scan to run",
+    )
+    run_parser.add_argument(
+        "--url", help="Target URL (for attack_surface) or repo path (for sca)"
+    )
+    run_parser.add_argument(
+        "--source", help="Path to Solidity source file (for smart_contract)"
+    )
+    run_parser.add_argument(
+        "--scope",
+        nargs="*",
+        default=[],
+        help="Allowed domains or repositories for the scan",
+    )
+    run_parser.add_argument(
+        "--no-accept",
+        action="store_true",
+        help="Do not accept terms (will cause the request to fail)",
+    )
+    run_parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="Wait for the job to complete and display results.",
+    )
+
     # Parser for the 'status' command
-    status_parser = subparsers.add_parser("status", help="Check job status")
-    status_parser.add_argument("job_id", help="Job ID to check")
+    status_parser = subparsers.add_parser("status", help="Check the status of a job")
+    status_parser.add_argument("job_id", help="The ID of the job to check")
     status_parser.add_argument(
         "--api", default="http://localhost:8000", help="Backend API URL"
     )
 
-    args = parser.parse_args()
+    # Default command logic: if no command is given, or an unknown command is given,
+    # assume 'run' unless it's a help flag.
+    argv = sys.argv[1:]
+    if not argv or (
+        argv[0] not in ("run", "status", "-h", "--help")
+    ):
+        argv.insert(0, "run")
+
+    args = parser.parse_args(argv)
 
     if args.cmd == "status":
         # Handle 'status' command
         r = requests.get(f"{args.api}/jobs/{args.job_id}")
         try:
             r.raise_for_status()
-        except Exception:
-            print(r.text, file=sys.stderr)
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching job status: {e}", file=sys.stderr)
             sys.exit(1)
         data = r.json()
         print_job_status(data)
-    else:
-        # Handle default 'run' command
-        # Manually check for required arguments for the run command
-        if not args.project or not args.type:
-            parser.error(
-                "the following arguments are required for 'run' command: --project, --type"
-            )
 
+    elif args.cmd == "run":
+        # Handle 'run' command
         payload = {
             "project_name": args.project,
             "job_type": args.type,
@@ -106,24 +110,29 @@ def main():
 
         if args.type == "attack_surface":
             if not args.url:
-                parser.error("--url is required for attack_surface")
+                run_parser.error("--url is required for attack_surface")
             payload["target_url"] = args.url
 
-        if args.type == "sca":
+        elif args.type == "sca":
             if not args.url:
-                parser.error("--url must point to local repo path for SCA")
+                run_parser.error("--url must point to a local repo path for sca")
             payload["target_url"] = args.url
 
-        if args.type == "smart_contract":
+        elif args.type == "smart_contract":
             if not args.source:
-                parser.error("--source .sol file required for smart_contract")
-            payload["contract_source"] = open(args.source, "r", encoding="utf-8").read()
+                run_parser.error("--source .sol file is required for smart_contract")
+            try:
+                with open(args.source, "r", encoding="utf-8") as f:
+                    payload["contract_source"] = f.read()
+            except FileNotFoundError:
+                print(f"Error: Source file not found at {args.source}", file=sys.stderr)
+                sys.exit(1)
 
-        r = requests.post(f"{args.api}/jobs", json=payload)
         try:
+            r = requests.post(f"{args.api}/jobs", json=payload)
             r.raise_for_status()
-        except Exception:
-            print(r.text, file=sys.stderr)
+        except requests.exceptions.RequestException as e:
+            print(f"Error submitting job: {e}", file=sys.stderr)
             sys.exit(1)
 
         data = r.json()
@@ -137,16 +146,22 @@ def main():
             spinner_idx = 0
             print("Waiting for job to complete...", end="", flush=True)
             while True:
-                time.sleep(0.2)
-                print(f"\rWaiting for job to complete... {spinner[spinner_idx]}", end="", flush=True)
+                print(
+                    f"\rWaiting for job to complete... {spinner[spinner_idx]}",
+                    end="",
+                    flush=True,
+                )
                 spinner_idx = (spinner_idx + 1) % len(spinner)
+                time.sleep(0.2)
 
                 # Check status every 2 seconds
                 if int(time.time() * 5) % 10 == 0:
-                    r = requests.get(f"{args.api}/jobs/{job_id}")
-                    if r.ok:
+                    try:
+                        r = requests.get(f"{args.api}/jobs/{job_id}")
+                        r.raise_for_status()
                         status_data = r.json()
                         status = status_data.get("status")
+
                         if status == "finished":
                             print("\rJob finished!               ")
                             print_job_status(status_data)
@@ -156,10 +171,8 @@ def main():
                                 f"\rJob in unexpected state: {status}", file=sys.stderr
                             )
                             break
-                    else:
-                        print(
-                            f"\rError fetching status: {r.text}", file=sys.stderr
-                        )
+                    except requests.exceptions.RequestException as e:
+                        print(f"\rError fetching status: {e}", file=sys.stderr)
                         break
         else:
             print(f"To check status, run: bp status {job_id}")
