@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Literal
 from urllib.parse import urlparse
 
+import httpx
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException, Depends, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,12 +46,22 @@ except Exception:
         run_sca_scan,
     )
 
-app = FastAPI(title="Bug Bounty Platform Backend")
 
-# Initialize DB
-@app.on_event("startup")
-def on_startup():
-    init_db()
+# ⚡ Bolt: Use a lifespan event to manage the HTTP client lifecycle.
+# This creates a single, reusable client, which is much more performant
+# than creating a new one for every request.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage the HTTP client's lifecycle."""
+    # Startup: Create a single, reusable httpx.AsyncClient
+    app.state.http_client = httpx.AsyncClient()
+    init_db()  # Initialize the database
+    yield
+    # Shutdown: The client is automatically closed by the `async with` block.
+    await app.state.http_client.aclose()
+
+
+app = FastAPI(title="Bug Bounty Platform Backend", lifespan=lifespan)
 
 RESULTS_DIR = Path(__file__).resolve().parent / "results"
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
@@ -247,7 +260,7 @@ async def create_job(
         user_id=current_user.id
     )
     
-    background_tasks.add_task(_run_scans, job_id, request, db)
+    background_tasks.add_task(_run_scans, job_id, request, app)
     return job_status
 
 
@@ -300,16 +313,11 @@ async def get_job(
         user_id=job.user_id
     )
 
-async def _run_scans(job_id: str, request: JobRequest, db: Session = None) -> None:
-    # Need a new session if running in background? 
-    # Actually, SQLAlchemy sessions are not thread-safe. 
-    # For background tasks, it's better to create a new session.
-    # But for MVP simplicity, we'll try to use a fresh session context here.
-    
+async def _run_scans(job_id: str, request: JobRequest, app: FastAPI) -> None:
     # Re-instantiate session for background task
     db_gen = get_db()
     bg_db = next(db_gen)
-    
+
     try:
         job = bg_db.query(Job).filter(Job.id == job_id).first()
         if not job:
@@ -347,13 +355,14 @@ async def _run_scans(job_id: str, request: JobRequest, db: Session = None) -> No
         job.status = JobStatusEnum.COMPLETED
         job.result = result
         bg_db.commit()
-        
+
         # Also save to disk for legacy support
         with open(RESULTS_DIR / f"{job_id}.json", "w") as f:
             json.dump(result, f, indent=2)
-            
-        _notify_slack(job_id, request, result)
-        
+
+        # ⚡ Bolt: Non-blocking notification to avoid blocking the event loop.
+        await _notify_slack(job_id, request, result, app)
+
     except Exception as e:
         if job:
             job.status = JobStatusEnum.FAILED
@@ -363,14 +372,13 @@ async def _run_scans(job_id: str, request: JobRequest, db: Session = None) -> No
     finally:
         bg_db.close()
 
-def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]) -> None:
+
+async def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any], app: FastAPI) -> None:
     """Post a short summary to Slack if SLACK_WEBHOOK_URL is set."""
     webhook = os.environ.get("SLACK_WEBHOOK_URL")
     if not webhook:
         return
     try:
-        import requests  # lazy import
-
         counts = []
         if result.get("web_scan"):
             ws = result["web_scan"]
@@ -397,7 +405,8 @@ def _notify_slack(job_id: str, request: JobRequest, result: Dict[str, Any]) -> N
             f"type: {request.job_type} | project: {request.project_name}\n"
             f"summary: {' '.join(counts) if counts else 'done'}"
         )
-        requests.post(webhook, json={"text": text}, timeout=5)
+        # ⚡ Bolt: Use the shared httpx.AsyncClient for non-blocking IO and connection pooling.
+        await app.state.http_client.post(webhook, json={"text": text}, timeout=5)
     except Exception:
         # Silent: notifications should never break the job
         pass
