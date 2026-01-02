@@ -1,17 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from backend.main import app
-
-
-@pytest.fixture(autouse=True)
-def no_background_tasks(monkeypatch):
-    # Avoid running real background scans during tests
-    async def _noop(job_id, request):
-        return None
-
-    monkeypatch.setattr("backend.main._run_scans", _noop)
-
 
 def _minimal_job_payload():
     return {
@@ -22,41 +11,38 @@ def _minimal_job_payload():
     }
 
 
-def test_post_jobs_open_when_no_api_key_set(monkeypatch):
-    # Ensure API_KEY is not set
-    monkeypatch.delenv("API_KEY", raising=False)
-
-    client = TestClient(app)
-    resp = client.post("/jobs", json=_minimal_job_payload())
+def test_jobs_endpoint_requires_authentication(client: TestClient):
+    """
+    Verify that the /jobs endpoint is protected and requires a valid JWT.
+    """
+    # 1. Create a new user
+    user_payload = {
+        "email": "test@example.com",
+        "password": "a_secure_password"
+    }
+    resp = client.post("/auth/register", json=user_payload)
     assert resp.status_code == 200
-    data = resp.json()
-    assert "job_id" in data
 
-
-def test_post_jobs_requires_api_key_when_set(monkeypatch):
-    # Set API key requirement
-    monkeypatch.setenv("API_KEY", "secret")
-
-    client = TestClient(app)
-
-    # Missing header → 401
+    # 2. Attempt to access /jobs without a token (should fail)
     resp = client.post("/jobs", json=_minimal_job_payload())
     assert resp.status_code == 401
 
-    # Wrong header → 401
-    resp = client.post(
-        "/jobs",
-        json=_minimal_job_payload(),
-        headers={"X-API-Key": "wrong"},
-    )
+    # 3. Log in to get an access token
+    login_payload = {
+        "username": user_payload["email"],
+        "password": user_payload["password"]
+    }
+    resp = client.post("/auth/token", data=login_payload)
+    assert resp.status_code == 200
+    token = resp.json()["access_token"]
+
+    # 4. Access /jobs with an invalid token (should fail)
+    headers = {"Authorization": "Bearer invalid-token"}
+    resp = client.post("/jobs", json=_minimal_job_payload(), headers=headers)
     assert resp.status_code == 401
 
-    # Correct header → 200
-    resp = client.post(
-        "/jobs",
-        json=_minimal_job_payload(),
-        headers={"X-API-Key": "secret"},
-    )
+    # 5. Access /jobs with the correct token (should succeed)
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = client.post("/jobs", json=_minimal_job_payload(), headers=headers)
     assert resp.status_code == 200
-    data = resp.json()
-    assert data.get("project_name") == "demo"
+    assert "job_id" in resp.json()
