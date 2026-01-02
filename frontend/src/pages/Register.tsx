@@ -7,12 +7,14 @@ const Register = () => {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSuccess('');
+    setLoading(true);
     
     try {
       await api.post('/auth/register', { email, password });
@@ -20,6 +22,8 @@ const Register = () => {
       setTimeout(() => navigate('/login'), 2000);
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Registration failed');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,8 +34,9 @@ const Register = () => {
       {success && <div className="success">{success}</div>}
       <form onSubmit={handleSubmit}>
         <div className="form-group">
-          <label>Email</label>
+          <label htmlFor="email">Email</label>
           <input 
+            id="email"
             type="email" 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
@@ -39,15 +44,18 @@ const Register = () => {
           />
         </div>
         <div className="form-group">
-          <label>Password</label>
+          <label htmlFor="password">Password</label>
           <input 
+            id="password"
             type="password" 
             value={password} 
             onChange={(e) => setPassword(e.target.value)} 
             required 
           />
         </div>
-        <button type="submit">Sign Up</button>
+        <button type="submit" disabled={loading}>
+          {loading ? 'Signing Up...' : 'Sign Up'}
+        </button>
       </form>
       <p>
         Already have an account? <Link to="/login">Login</Link>
