@@ -352,7 +352,7 @@ async def _run_scans(job_id: str, request: JobRequest, db: Session = None) -> No
         with open(RESULTS_DIR / f"{job_id}.json", "w") as f:
             json.dump(result, f, indent=2)
             
-        _notify_slack(job_id, request, result)
+        await asyncio.to_thread(_notify_slack, job_id, request, result)
         
     except Exception as e:
         if job:
