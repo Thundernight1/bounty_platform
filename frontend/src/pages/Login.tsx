@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../api';
+import axios from 'axios';
 
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setIsLoading(true);
     
     try {
       const formData = new FormData();
@@ -23,8 +26,14 @@ const Login = () => {
       
       localStorage.setItem('token', response.data.access_token);
       navigate('/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Login failed');
+    } catch (err) {
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data?.detail || 'Login failed');
+      } else {
+        setError('An unexpected error occurred');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -51,7 +60,9 @@ const Login = () => {
             required 
           />
         </div>
-        <button type="submit">Sign In</button>
+        <button type="submit" disabled={isLoading}>
+          {isLoading ? 'Signing In...' : 'Sign In'}
+        </button>
       </form>
       <p>
         Don't have an account? <Link to="/register">Register</Link>
