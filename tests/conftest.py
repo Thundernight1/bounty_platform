@@ -16,7 +16,7 @@ os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
 
 from backend.database import Base, get_db
-from backend.main_v2 import app
+from backend.main import app
 
 
 # Create test database engine
@@ -75,7 +75,7 @@ def no_background_tasks(monkeypatch):
 
     # Try to patch the background task function
     try:
-        monkeypatch.setattr("backend.main_v2._run_scans", _noop)
+        monkeypatch.setattr("backend.main._run_scans", _noop)
     except AttributeError:
         pass
 
