@@ -1,14 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api';
-import { LogOut, Plus, RefreshCw } from 'lucide-react';
+import { LogOut, Plus } from 'lucide-react';
+import JobRow from './JobRow';
 
-interface Job {
+// ⚡ Bolt: Defining a specific type for job results to improve type safety.
+export interface JobResult {
+  target_url?: string;
+  web_scan?: {
+    vulnerabilities?: unknown[];
+  };
+  nuclei?: {
+    findings?: unknown[];
+  };
+}
+
+export interface Job {
   job_id: string;
   project_name: string;
   status: string;
   created_at: string;
-  result: any;
+  result: JobResult | null;
 }
 
 const Dashboard = () => {
@@ -22,25 +34,25 @@ const Dashboard = () => {
   const [targetUrl, setTargetUrl] = useState('');
   const [jobType, setJobType] = useState('attack_surface');
 
-  const fetchJobs = async () => {
+  const fetchJobs = useCallback(async () => {
     try {
       const res = await api.get('/jobs');
       setJobs(res.data);
     } catch (err) {
       console.error(err);
-      if ((err as any).response?.status === 401) {
+      if ((err as { response?: { status?: number } })?.response?.status === 401) {
         navigate('/login');
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchJobs();
     const interval = setInterval(fetchJobs, 5000); // Poll every 5s
     return () => clearInterval(interval);
-  }, [navigate]);
+  }, [fetchJobs]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -61,8 +73,9 @@ const Dashboard = () => {
       setProjectName('');
       setTargetUrl('');
       fetchJobs();
-    } catch (err: any) {
-      alert(err.response?.data?.detail || 'Failed to create job');
+    } catch (err) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      alert(error.response?.data?.detail || 'Failed to create job');
     }
   };
 
@@ -135,25 +148,7 @@ const Dashboard = () => {
                 </tr>
               ) : (
                 jobs.map(job => (
-                  <tr key={job.job_id}>
-                    <td>{job.project_name}</td>
-                    <td>{job.job_id}</td>
-                    <td>{job.result?.target_url || '-'}</td>
-                    <td>
-                      <span className={`badge ${job.status}`}>
-                        {job.status}
-                      </span>
-                    </td>
-                    <td>{new Date(job.created_at).toLocaleString()}</td>
-                    <td>
-                      {job.result ? (
-                        <div style={{ fontSize: '0.8rem' }}>
-                          {job.result.web_scan && `Web: ${job.result.web_scan.vulnerabilities?.length || 0} `}
-                          {job.result.nuclei && `Nuclei: ${job.result.nuclei.findings?.length || 0}`}
-                        </div>
-                      ) : '-'}
-                    </td>
-                  </tr>
+                  <JobRow key={job.job_id} job={job} />
                 ))
               )}
             </tbody>
