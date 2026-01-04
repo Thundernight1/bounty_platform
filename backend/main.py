@@ -63,7 +63,10 @@ app.add_middleware(
 )
 
 # --- Security Config ---
-SECRET_KEY = os.getenv("SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7")
+_secret_key = os.getenv("SECRET_KEY")
+if not _secret_key:
+    raise ValueError("Missing SECRET_KEY environment variable for JWT.")
+SECRET_KEY = _secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
@@ -283,7 +286,7 @@ async def get_job(
     if job.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorized to view this job")
 
-    if job.status == JobStatusEnum.FINISHED and job.result is None:
+    if job.status == JobStatusEnum.COMPLETED and job.result is None:
         # Fallback to file system if result not in DB (legacy)
         result_file = RESULTS_DIR / f"{job_id}.json"
         if result_file.exists():

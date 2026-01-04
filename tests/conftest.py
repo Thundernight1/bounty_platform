@@ -10,13 +10,17 @@ from typing import Generator
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
+from datetime import timedelta
 
 # Set test environment
 os.environ["APP_ENV"] = "test"
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
+os.environ["SECRET_KEY"] = "test-secret"
+
 
 from backend.database import Base, get_db
-from backend.main_v2 import app
+from backend.main import app, get_password_hash, create_access_token
+from backend.models import User
 
 
 # Create test database engine
@@ -70,12 +74,12 @@ def no_background_tasks(monkeypatch):
     """
     Prevent background tasks from running during tests.
     """
-    async def _noop(job_id, request):
+    async def _noop(job_id, request, db):
         return None
 
     # Try to patch the background task function
     try:
-        monkeypatch.setattr("backend.main_v2._run_scans", _noop)
+        monkeypatch.setattr("backend.main._run_scans", _noop)
     except AttributeError:
         pass
 
@@ -93,7 +97,21 @@ def sample_job_payload():
 
 
 @pytest.fixture
-def api_key_env(monkeypatch):
-    """Set API key for testing"""
-    monkeypatch.setenv("API_KEY", "test-api-key")
-    return "test-api-key"
+def test_user(db_session: Session) -> User:
+    """Fixture to create a test user in the database."""
+    hashed_password = get_password_hash("testpassword")
+    user = User(email="test@example.com", hashed_password=hashed_password, is_active=True)
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def auth_headers(test_user: User) -> dict[str, str]:
+    """Fixture to create authentication headers for a test user."""
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={"sub": test_user.email}, expires_delta=access_token_expires
+    )
+    return {"Authorization": f"Bearer {access_token}"}
